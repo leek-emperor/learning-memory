@@ -27,8 +27,8 @@ from search import register_search_tool
 def print_banner():
     print()
     print("  ╔══════════════════════════════════════╗")
-    print("  ║   learning-memory v0.1              ║")
-    print("  ║   从零实现 Claude Code 记忆系统      ║")
+    print("  ║   learning-memory v0.1               ║")
+    print("  ║   从零实现 Claude Code 记忆系统         ║")
     print("  ╚══════════════════════════════════════╝")
     print()
     print(f"  模型: {state.model}")
@@ -119,7 +119,7 @@ async def main():
     os.makedirs(SESSION_DIR, exist_ok=True)
     os.makedirs(MEMORY_DIR, exist_ok=True)
 
-    # 初始化状态，直接使用 `.env` 中配置的火山引擎 endpoint ID。
+    # 初始化状态，直接使用 `.env` 中配置的模型
     state.model = OPENAI_API_MODEL
     state.cwd = os.getcwd()
     state.session_id = str(uuid.uuid4())[:8]

@@ -48,7 +48,6 @@ if SEARCH_BACKEND not in {"tavily", "searxng"}:
 TAVILY_API_KEY = _require_env("TAVILY_API_KEY") if SEARCH_BACKEND == "tavily" else ""
 SEARXNG_URL = _require_env("SEARXNG_URL") if SEARCH_BACKEND == "searxng" else ""
 
-
 # ── 会话存储 ──
 def _resolve_data_root() -> str:
     """解析可写的数据目录。

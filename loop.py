@@ -8,7 +8,7 @@ from openai import OpenAI
 from config import OPENAI_API_KEY, OPENAI_API_BASE, OPENAI_API_MODEL, MAX_CONTEXT_TOKENS
 from state import state, SessionPhase
 
-# 初始化 OpenAI 客户端（兼容火山引擎等 OpenAI 兼容端点）
+# 初始化 OpenAI 客户端（OpenAI 兼容端点）
 _client_kwargs = {"api_key": OPENAI_API_KEY}
 if OPENAI_API_BASE:
     _client_kwargs["base_url"] = OPENAI_API_BASE
