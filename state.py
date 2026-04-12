@@ -28,18 +28,25 @@ class SessionState:
     _total_cost_usd: float = 0.0
     _total_input_tokens: int = 0
     _total_output_tokens: int = 0
+    _last_context_tokens: int = 0
 
     # ── 状态机 ──
     _phase: SessionPhase = SessionPhase.IDLE
 
     # ── 工作目录 ──
     _cwd: str = "."
+    _workspace_root: str = "."
 
     # ── 模型 ──
     _model: str = "gpt-4o-mini"
 
     # ── 消息游标（用于记忆提取，记录已处理到哪条消息） ──
     _last_processed_msg_index: int = 0
+
+    # ── 压缩统计 ──
+    _micro_compact_count: int = 0
+    _auto_compact_count: int = 0
+    _auto_compact_failures: int = 0
 
     # ── 单例 ──
     _instance: Optional["SessionState"] = None
@@ -83,10 +90,23 @@ class SessionState:
     def total_output_tokens(self) -> int:
         return self._total_output_tokens
 
+    @property
+    def last_context_tokens(self) -> int:
+        return self._last_context_tokens
+
     def accumulate_usage(self, input_tokens: int, output_tokens: int, cost: float):
         self._total_input_tokens += input_tokens
         self._total_output_tokens += output_tokens
         self._total_cost_usd += cost
+
+    def restore_usage(self, input_tokens: int, output_tokens: int, cost: float):
+        """从持久化元数据恢复累计 token 和成本。"""
+        self._total_input_tokens = max(0, int(input_tokens))
+        self._total_output_tokens = max(0, int(output_tokens))
+        self._total_cost_usd = max(0.0, float(cost))
+
+    def set_last_context_tokens(self, value: int):
+        self._last_context_tokens = max(0, int(value))
 
     # ── 状态机 ──
     @property
@@ -108,6 +128,14 @@ class SessionState:
     def cwd(self, value: str):
         self._cwd = value
 
+    @property
+    def workspace_root(self) -> str:
+        return self._workspace_root
+
+    @workspace_root.setter
+    def workspace_root(self, value: str):
+        self._workspace_root = value
+
     # ── 模型 ──
     @property
     def model(self) -> str:
@@ -126,6 +154,36 @@ class SessionState:
     def last_processed_msg_index(self, value: int):
         self._last_processed_msg_index = value
 
+    @property
+    def micro_compact_count(self) -> int:
+        return self._micro_compact_count
+
+    def restore_micro_compact_count(self, value: int):
+        self._micro_compact_count = max(0, int(value))
+
+    def increment_micro_compact_count(self):
+        self._micro_compact_count += 1
+
+    @property
+    def auto_compact_count(self) -> int:
+        return self._auto_compact_count
+
+    def restore_auto_compact_count(self, value: int):
+        self._auto_compact_count = max(0, int(value))
+
+    def increment_auto_compact_count(self):
+        self._auto_compact_count += 1
+
+    @property
+    def auto_compact_failures(self) -> int:
+        return self._auto_compact_failures
+
+    def record_auto_compact_failure(self):
+        self._auto_compact_failures += 1
+
+    def reset_auto_compact_failures(self):
+        self._auto_compact_failures = 0
+
     def reset(self):
         """重置所有状态（用于测试或新会话）"""
         self._session_id = ""
@@ -134,9 +192,14 @@ class SessionState:
         self._total_cost_usd = 0.0
         self._total_input_tokens = 0
         self._total_output_tokens = 0
+        self._last_context_tokens = 0
         self._phase = SessionPhase.IDLE
         self._cwd = "."
+        self._workspace_root = "."
         self._last_processed_msg_index = 0
+        self._micro_compact_count = 0
+        self._auto_compact_count = 0
+        self._auto_compact_failures = 0
 
 
 # 全局单例

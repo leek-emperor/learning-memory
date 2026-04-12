@@ -1,6 +1,15 @@
 # learning-memory
 
+<br />
+
+
 一个从零实现的极简 AI Coding Agent 骨架，目标是先搭出带工具调用的 LLM Loop，再在后续版本里逐步加上短期记忆、长期记忆和上下文压缩能力。
+
+## 教程文章
+
+- [基础搭建：LLM Loop + Tool Use（一）](./doc/%E3%80%90%E4%BB%8E%E9%9B%B6%E5%AE%9E%E7%8E%B0%20Claude%20Code%20%E8%AE%B0%E5%BF%86%E7%B3%BB%E7%BB%9F%E3%80%91%E5%9F%BA%E7%A1%80%E6%90%AD%E5%BB%BA%EF%BC%9A%20LLM%20Loop%20%2B%20Tool%20Use%EF%BC%88%E4%B8%80%EF%BC%89.md)
+- [短期记忆：会话持久化与上下文压缩（二）](./doc/%E3%80%90%E4%BB%8E%E9%9B%B6%E5%AE%9E%E7%8E%B0%20Claude%20Code%20%E8%AE%B0%E5%BF%86%E7%B3%BB%E7%BB%9F%E3%80%91%E7%9F%AD%E6%9C%9F%E8%AE%B0%E5%BF%86%EF%BC%9A%E4%BC%9A%E8%AF%9D%E6%8C%81%E4%B9%85%E5%8C%96%E4%B8%8E%E4%B8%8A%E4%B8%8B%E6%96%87%E5%8E%8B%E7%BC%A9%EF%BC%88%E4%BA%8C%EF%BC%89.md)
+
 
 当前版本先解决最核心的一件事：
 
@@ -223,7 +232,8 @@ uv run main.py
 
 模型: gpt-4o-mini
 工具: readFile, writeFile, listFiles, webSearch
-工作目录: /path/to/learning-memory
+启动目录: /path/to/learning-memory
+工作区: /path/to/learning-memory/workspace
 
 输入消息开始对话，/help 查看命令
 
@@ -233,14 +243,8 @@ uv run main.py
 [状态机] running → idle
 
 Claude> 当前文件夹下的文件和目录如下：
-README.md
-config.py
-file_tools.py
-loop.py
-main.py
-search.py
-state.py
-tools.py
+notes/
+todo.txt
 ```
 
 ## 支持的命令
@@ -304,11 +308,30 @@ docker run -d -p 8888:8080 searxng/searxng
 
 - `session_id`
 - `cwd`
+- `workspace_root`
 - `model`
 - `phase`
 - `total_input_tokens`
 - `total_output_tokens`
 - `total_cost_usd`
+
+## 文件工作区
+
+为了避免模型直接读写教程源码目录，文件工具默认不会把启动目录当成可操作根目录。
+
+程序启动后会自动创建：
+
+```text
+workspace/
+```
+
+并把它作为文件工具的默认工作区。也就是说：
+
+- `readFile("a.txt")` 实际读取的是 `workspace/a.txt`
+- `writeFile("notes/todo.md")` 实际写入的是 `workspace/notes/todo.md`
+- 如果路径试图跳出 `workspace/`，会被安全检查拦截
+
+这样“程序从哪里启动”和“模型能操作哪里”就是两个不同概念，后面继续加会话恢复和记忆系统时也更清晰。
 
 ## 下一步会做什么
 

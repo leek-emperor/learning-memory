@@ -4,7 +4,29 @@
 这三个是 LLM 编程助手的基础能力。
 """
 import os
+from typing import Optional, Tuple
 from state import state
+
+
+def _get_workspace_root() -> str:
+    """获取文件工具的工作区根目录。"""
+    return os.path.realpath(state.workspace_root or state.cwd)
+
+
+def _resolve_workspace_path(path: str) -> str:
+    """将相对路径解析到工作区内，绝对路径保持原样。"""
+    if os.path.isabs(path):
+        return path
+    return os.path.join(_get_workspace_root(), path)
+
+
+def _ensure_within_workspace(path: str, display_path: str) -> Tuple[str, Optional[str]]:
+    """校验路径是否落在工作区内，返回真实路径和错误信息。"""
+    real_path = os.path.realpath(path)
+    workspace_root = _get_workspace_root()
+    if os.path.commonpath([real_path, workspace_root]) != workspace_root:
+        return real_path, f"错误: 不允许访问工作区之外的路径: {display_path}"
+    return real_path, None
 
 
 async def read_file(args: dict) -> str:
@@ -13,15 +35,10 @@ async def read_file(args: dict) -> str:
     if not path:
         return "错误: 缺少 path 参数"
 
-    # 支持相对路径（相对于 cwd）
-    if not os.path.isabs(path):
-        path = os.path.join(state.cwd, path)
-
-    # 安全检查：不允许读取 cwd 之外的文件
-    real_path = os.path.realpath(path)
-    real_cwd = os.path.realpath(state.cwd)
-    if not real_path.startswith(real_cwd):
-        return f"错误: 不允许读取工作目录之外的文件: {path}"
+    # 相对路径默认从工作区根目录开始解析。
+    real_path, error = _ensure_within_workspace(_resolve_workspace_path(path), path)
+    if error:
+        return error
 
     if not os.path.isfile(real_path):
         return f"错误: 文件不存在: {path}"
@@ -47,13 +64,9 @@ async def write_file(args: dict) -> str:
     if not path:
         return "错误: 缺少 path 参数"
 
-    if not os.path.isabs(path):
-        path = os.path.join(state.cwd, path)
-
-    real_path = os.path.realpath(path)
-    real_cwd = os.path.realpath(state.cwd)
-    if not real_path.startswith(real_cwd):
-        return f"错误: 不允许写入工作目录之外的文件: {path}"
+    real_path, error = _ensure_within_workspace(_resolve_workspace_path(path), path)
+    if error:
+        return error
 
     try:
         os.makedirs(os.path.dirname(real_path), exist_ok=True)
@@ -69,13 +82,9 @@ async def list_files(args: dict) -> str:
     path = args.get("path", ".")
     pattern = args.get("pattern", "*")
 
-    if not os.path.isabs(path):
-        path = os.path.join(state.cwd, path)
-
-    real_path = os.path.realpath(path)
-    real_cwd = os.path.realpath(state.cwd)
-    if not real_path.startswith(real_cwd):
-        return f"错误: 不允许访问工作目录之外的目录: {path}"
+    real_path, error = _ensure_within_workspace(_resolve_workspace_path(path), path)
+    if error:
+        return error
 
     if not os.path.isdir(real_path):
         return f"错误: 目录不存在: {path}"
@@ -109,7 +118,7 @@ def register_file_tools(registry):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "文件路径（相对于工作目录）",
+                    "description": "文件路径（相对于工作区）",
                 },
             },
             "required": ["path"],
@@ -126,7 +135,7 @@ def register_file_tools(registry):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "文件路径（相对于工作目录）",
+                    "description": "文件路径（相对于工作区）",
                 },
                 "content": {
                     "type": "string",
@@ -147,7 +156,7 @@ def register_file_tools(registry):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "目录路径（默认当前目录）",
+                    "description": "目录路径（默认工作区根目录）",
                 },
                 "pattern": {
                     "type": "string",

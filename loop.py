@@ -4,9 +4,17 @@
 每次用户输入 → 调用 LLM → 如果有工具调用则执行 → 循环直到最终回复。
 """
 import json
+from typing import Any, Dict, List, Optional, Sequence
+
 from openai import OpenAI
-from config import OPENAI_API_KEY, OPENAI_API_BASE, OPENAI_API_MODEL, MAX_CONTEXT_TOKENS
+from auto_compact import maybe_auto_compact
+from config import OPENAI_API_KEY, OPENAI_API_BASE, MAX_CONTEXT_TOKENS
+from micro_compact import apply_micro_compact, should_auto_micro_compact
 from state import state, SessionPhase
+from token_counter import (
+    count_message_tokens as precise_count_message_tokens,
+    count_messages_tokens,
+)
 
 # 初始化 OpenAI 客户端（OpenAI 兼容端点）
 _client_kwargs = {"api_key": OPENAI_API_KEY}
@@ -19,24 +27,13 @@ SYSTEM_PROMPT = """你是一个有帮助的 AI 编程助手。你可以使用工
 
 
 def count_message_tokens(msg: dict) -> int:
-    """粗略估算单条消息的 token 数（字符数 / 3.5，适用于中文混合场景）"""
-    content = msg.get("content", "")
-    if isinstance(content, list):
-        # content 可能是 list[TextBlock | ToolCallBlock]
-        text = ""
-        for block in content:
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    text += block.get("text", "")
-                elif block.get("type") == "tool_use":
-                    text += json.dumps(block.get("input", {}))
-        content = text
-    return max(1, len(str(content)) // 3)
+    """兼容旧接口，内部改为精确 token 计数。"""
+    return precise_count_message_tokens(msg, state.model)
 
 
 def estimate_total_tokens(messages: list[dict]) -> int:
-    """估算消息列表的总 token 数"""
-    return sum(count_message_tokens(m) for m in messages)
+    """兼容旧接口，内部改为精确 token 计数。"""
+    return count_messages_tokens(messages, state.model)
 
 
 def build_api_messages(messages: list[dict]) -> list[dict]:
@@ -70,10 +67,23 @@ def build_api_messages(messages: list[dict]) -> list[dict]:
     return api_msgs
 
 
+async def _append_message(
+    messages: List[Dict[str, Any]],
+    message: Dict[str, Any],
+    session_store=None,
+) -> None:
+    """统一追加消息并做持久化，避免主循环里反复写样板代码。"""
+    messages.append(message)
+    if session_store is not None:
+        await session_store.append_message(message, messages)
+
+
 async def chat_loop(
     messages: list[dict],
     tools: list[dict],
     tool_handlers: dict,
+    session_store=None,
+    compactable_tools: Optional[Sequence[str]] = None,
     max_iterations: int = 20,
 ) -> list[dict]:
     """核心对话循环
@@ -95,8 +105,27 @@ async def chat_loop(
         更新后的 messages 列表
     """
     state.set_phase(SessionPhase.RUNNING)
+    compactable_tools = compactable_tools or []
 
-    for i in range(max_iterations):
+    for _ in range(max_iterations):
+        # 每轮开始先看上下文是否已经偏大，优先清理旧工具结果。
+        current_tokens = count_messages_tokens(messages, state.model)
+        state.set_last_context_tokens(current_tokens)
+        if compactable_tools and should_auto_micro_compact(current_tokens, MAX_CONTEXT_TOKENS):
+            compact_result = apply_micro_compact(
+                messages,
+                compactable_tools=compactable_tools,
+                model=state.model,
+            )
+            if compact_result["changed"]:
+                state.increment_micro_compact_count()
+                print(
+                    f"  [微压缩] 清理 {compact_result['replaced_count']} 条旧工具结果，"
+                    f"释放 ~{compact_result['freed_tokens']} tokens"
+                )
+                if session_store is not None:
+                    await session_store.append_snapshot(messages, "auto_micro_compact")
+
         # 构建发给 API 的消息
         api_messages = build_api_messages(messages)
 
@@ -128,7 +157,21 @@ async def chat_loop(
                 "role": "assistant",
                 "content": assistant_msg.content or "",
             }
-            messages.append(final_msg)
+            await _append_message(messages, final_msg, session_store)
+
+            # 本轮结束后做一次自动摘要压缩，避免上下文无限增长。
+            auto_compact_result = await maybe_auto_compact(messages)
+            if auto_compact_result.get("changed"):
+                messages = auto_compact_result["messages"]
+                print(
+                    f"  [自动压缩] 生成历史摘要，释放 ~{auto_compact_result['freed_tokens']} tokens"
+                )
+                if session_store is not None:
+                    await session_store.append_snapshot(messages, "auto_compact")
+            elif auto_compact_result.get("error"):
+                print(f"  [自动压缩] {auto_compact_result['error']}")
+
+            state.set_last_context_tokens(count_messages_tokens(messages, state.model))
             state.set_phase(SessionPhase.IDLE)
             return messages
 
@@ -148,7 +191,7 @@ async def chat_loop(
                 for tc in tool_calls
             ],
         }
-        messages.append(assistant_record)
+        await _append_message(messages, assistant_record, session_store)
 
         # 执行所有工具调用
         for tc in tool_calls:
@@ -172,16 +215,16 @@ async def chat_loop(
                     result = f"工具执行错误: {e}"
 
             # 将工具结果追加到消息
-            messages.append({
+            await _append_message(messages, {
                 "role": "tool",
                 "tool_call_id": tc.id,
                 "content": str(result),
-            })
+            }, session_store)
 
     # 超过最大迭代次数
-    messages.append({
+    await _append_message(messages, {
         "role": "assistant",
         "content": "[已达到最大工具调用轮次，停止执行]",
-    })
+    }, session_store)
     state.set_phase(SessionPhase.IDLE)
     return messages
