@@ -19,7 +19,7 @@
 
 最终效果：你可以聊几十轮、读十几个文件，程序会自动管理上下文空间。中途关掉再打开，用 `/resume` 接着聊。
 
-项目地址：<https://github.com/leek-emperor/agent-browser>
+项目地址：<https://github.com/leek-emperor/learning-memory>
 
 ***
 
@@ -246,7 +246,7 @@ def analyze_context(messages, model):
   tool: "[Old result cleared by micro compact: readFile]"
 ```
 
-关键点：**只清内容，不清结构**。消息的 role、tool_call_id 都保留，所以对话结构完整无损。
+关键点：**只清内容，不清结构**。消息的 role、tool\_call\_id 都保留，所以对话结构完整无损。
 
 ### 4.2 哪些工具结果可以清
 
@@ -318,7 +318,7 @@ replace_indexes = candidate_indexes[:-5]   # 保留最后 5 个
   ✅ 已微压缩 9 条旧工具结果，释放 ~30811 tokens
 ```
 
-一次 `/compact` 就释放了 ~30K tokens，效果非常明显。
+一次 `/compact` 就释放了 \~30K tokens，效果非常明显。
 
 ***
 
@@ -461,7 +461,7 @@ if history_sessions:
 
 ***
 
-## 七、workspace_root：安全边界
+## 七、workspace\_root：安全边界
 
 这一篇新增了一个 `workspace_root` 概念。文件工具的路径安全检查从 `cwd` 改成了 `workspace_root`：
 
@@ -528,14 +528,14 @@ if not real_path.startswith(real_workspace):
 
 ## 九、和 Claude Code 思路的对应关系
 
-| 本篇模块 | Claude Code 中的对应思路 | 保留了什么 |
-| -------- | ------------------------ | ---------- |
-| `session.py` SessionStore | transcript.ts | JSONL append-only、外部大内容存储、延迟刷盘、rewrite 事件 |
-| `session.py` /resume | history.ts + replLauncher.tsx | 会话列表扫描、meta.json 快照、消息重建、状态恢复 |
-| `token_counter.py` | tokenEstimation.ts + contextAnalysis.ts | tiktoken 精确计数、粗估回退、工具占比分析、重复读取检测 |
-| `micro_compact.py` | microCompact.ts | compactable 白名单、keep_recent、占位替换、自动触发 |
-| `auto_compact.py` | compact.ts + compact prompt | 85% 阈值、9 部分摘要、轮次切分、工作区快照恢复、熔断机制 |
-| `state.py` 新增字段 | Bootstrap State | 压缩统计、workspace_root、last_context_tokens |
+| 本篇模块                      | Claude Code 中的对应思路                      | 保留了什么                                      |
+| ------------------------- | --------------------------------------- | ------------------------------------------ |
+| `session.py` SessionStore | transcript.ts                           | JSONL append-only、外部大内容存储、延迟刷盘、rewrite 事件  |
+| `session.py` /resume      | history.ts + replLauncher.tsx           | 会话列表扫描、meta.json 快照、消息重建、状态恢复              |
+| `token_counter.py`        | tokenEstimation.ts + contextAnalysis.ts | tiktoken 精确计数、粗估回退、工具占比分析、重复读取检测           |
+| `micro_compact.py`        | microCompact.ts                         | compactable 白名单、keep\_recent、占位替换、自动触发     |
+| `auto_compact.py`         | compact.ts + compact prompt             | 85% 阈值、9 部分摘要、轮次切分、工作区快照恢复、熔断机制            |
+| `state.py` 新增字段           | Bootstrap State                         | 压缩统计、workspace\_root、last\_context\_tokens |
 
 ***
 
@@ -555,8 +555,9 @@ if not real_path.startswith(real_workspace):
 
 ## 系列导航
 
-| # | 篇名 | 状态 |
-| - | ---------------------------------- | ---- |
+| # | 篇名                                 | 状态    |
+| - | ---------------------------------- | ----- |
 | 1 | **构建带工具调用的 LLM Loop + Web Search** | ✅ 已完成 |
-| 2 | **短期记忆：会话持久化与上下文压缩** | ✅ 本篇 |
-| 3 | 长期记忆：项目指令与自动记忆 | 待创作 |
+| 2 | **短期记忆：会话持久化与上下文压缩**               | ✅ 本篇  |
+| 3 | 长期记忆：项目指令与自动记忆                     | 待创作   |
+

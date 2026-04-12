@@ -25,7 +25,7 @@
 
 最终产物是一个 CLI 程序。你运行 `uv run main.py` 后，就能像使用一个带工具能力的 AI 助手一样和它交互。
 
-项目地址：<https://github.com/leek-emperor/agent-browser>
+项目地址：<https://github.com/leek-emperor/learning-memory>
 
 ***
 
@@ -827,7 +827,7 @@ SEARCH_BACKEND=tavily  # 或 searxng
 
 ***
 
-项目地址：<https://github.com/leek-emperor/agent-browser>
+项目地址：<https://github.com/leek-emperor/learning-memory>
 
 ***
 
