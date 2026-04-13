@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from openai import OpenAI
 from auto_compact import maybe_auto_compact
+from claude_md import load_claude_md_text
 from config import OPENAI_API_KEY, OPENAI_API_BASE, MAX_CONTEXT_TOKENS
+from memory_prompt import build_memory_system_prompt
 from micro_compact import apply_micro_compact, should_auto_micro_compact
 from state import state, SessionPhase
 from token_counter import (
@@ -36,13 +38,29 @@ def estimate_total_tokens(messages: list[dict]) -> int:
     return count_messages_tokens(messages, state.model)
 
 
+def build_system_prompt() -> str:
+    """组合 CLAUDE.md、记忆系统提示和基础系统提示。"""
+    sections: List[str] = []
+
+    claude_md_text = load_claude_md_text()
+    if claude_md_text:
+        sections.append(claude_md_text)
+
+    memory_prompt = build_memory_system_prompt()
+    if memory_prompt:
+        sections.append(memory_prompt)
+
+    sections.append(SYSTEM_PROMPT)
+    return "\n\n".join(section.strip() for section in sections if section.strip())
+
+
 def build_api_messages(messages: list[dict]) -> list[dict]:
     """将内部消息格式转换为 OpenAI API 格式
 
     内部格式: role + content（统一字符串）
     API 格式:  role + content（字符串或 tool_calls 列表）
     """
-    api_msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    api_msgs = [{"role": "system", "content": build_system_prompt()}]
     for msg in messages:
         role = msg["role"]
         content = msg.get("content", "")

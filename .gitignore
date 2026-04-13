@@ -11,3 +11,5 @@ wheels/
 .env
 .learning-memory/
 workspace/
+.DS_Store
+docs/

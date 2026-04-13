@@ -48,6 +48,10 @@ class SessionState:
     _auto_compact_count: int = 0
     _auto_compact_failures: int = 0
 
+    # ── 长期记忆运行时状态 ──
+    _memory_written_this_turn: bool = False
+    _recent_surfaced_memory_ids: list[str] = field(default_factory=list)
+
     # ── 单例 ──
     _instance: Optional["SessionState"] = None
 
@@ -184,6 +188,32 @@ class SessionState:
     def reset_auto_compact_failures(self):
         self._auto_compact_failures = 0
 
+    @property
+    def memory_written_this_turn(self) -> bool:
+        return self._memory_written_this_turn
+
+    def mark_memory_written_this_turn(self):
+        self._memory_written_this_turn = True
+
+    def reset_memory_written_this_turn(self):
+        self._memory_written_this_turn = False
+
+    @property
+    def recent_surfaced_memory_ids(self) -> list[str]:
+        return list(self._recent_surfaced_memory_ids)
+
+    def note_surfaced_memory_ids(self, memory_ids: list[str], keep_recent: int = 20):
+        for memory_id in memory_ids:
+            if memory_id in self._recent_surfaced_memory_ids:
+                self._recent_surfaced_memory_ids.remove(memory_id)
+            self._recent_surfaced_memory_ids.append(memory_id)
+
+        if len(self._recent_surfaced_memory_ids) > keep_recent:
+            self._recent_surfaced_memory_ids = self._recent_surfaced_memory_ids[-keep_recent:]
+
+    def clear_recent_surfaced_memory_ids(self):
+        self._recent_surfaced_memory_ids = []
+
     def reset(self):
         """重置所有状态（用于测试或新会话）"""
         self._session_id = ""
@@ -200,6 +230,8 @@ class SessionState:
         self._micro_compact_count = 0
         self._auto_compact_count = 0
         self._auto_compact_failures = 0
+        self._memory_written_this_turn = False
+        self._recent_surfaced_memory_ids = []
 
 
 # 全局单例

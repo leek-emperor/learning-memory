@@ -17,7 +17,11 @@ import uuid
 import time
 from datetime import datetime
 
+from claude_md import build_init_template, has_project_claude_md
 from config import OPENAI_API_MODEL, SESSION_DIR, MEMORY_DIR
+from memdir import clear_all_memories, delete_memory, read_memory_index, scan_memories, write_memory
+from memory_extract import extract_memories_from_messages
+from memory_retrieve import inject_relevant_memories
 from micro_compact import apply_micro_compact
 from token_counter import analyze_context, count_messages_tokens, format_context_report
 from session import SessionStore, add_command_history, setup_command_history
@@ -56,6 +60,8 @@ def _format_timestamp(timestamp: float) -> str:
 def print_stats(messages: list[dict]):
     """打印会话统计信息"""
     analysis = analyze_context(messages, state.model)
+    memory_count = len(scan_memories())
+    memory_index_size = len(read_memory_index().encode("utf-8"))
     print()
     print(f"  💰 累计成本: ${state.total_cost_usd:.4f}")
     print(f"  📊 输入 token: {state.total_input_tokens:,}")
@@ -63,6 +69,8 @@ def print_stats(messages: list[dict]):
     print(f"  🧠 当前上下文: {analysis['total_tokens']:,} / {MAX_CONTEXT_TOKENS:,}")
     print(f"  🗜  微压缩次数: {state.micro_compact_count}")
     print(f"  📝 自动压缩次数: {state.auto_compact_count}")
+    print(f"  💾 记忆数量: {memory_count}")
+    print(f"  📚 MEMORY.md 大小: {memory_index_size} bytes")
     elapsed = time.time() - state.start_time
     print(f"  ⏱  会话时长: {elapsed:.0f}s")
     print()
@@ -105,6 +113,144 @@ def _restore_state_from_meta(meta: dict) -> None:
         state.workspace_root = restored_workspace
 
 
+def _print_memories() -> None:
+    """打印当前所有长期记忆。"""
+    memories = scan_memories()
+    if not memories:
+        print("\n  ℹ️ 当前还没有长期记忆\n")
+        return
+
+    print("\n  当前长期记忆:")
+    for index, item in enumerate(memories, 1):
+        print(
+            f"    {index}. [{item.type}] {item.name}"
+            f" | {item.file_name}"
+            f" | {_format_timestamp(item.created_at)}"
+        )
+    print()
+
+
+def _select_memory_by_index() -> tuple[object | None, list]:
+    """让用户从记忆列表中选一条。"""
+    memories = scan_memories()
+    if not memories:
+        print("\n  ℹ️ 当前还没有长期记忆\n")
+        return None, memories
+
+    _print_memories()
+    choice = input("  输入序号（回车取消）: ").strip()
+    if not choice:
+        print()
+        return None, memories
+
+    try:
+        selected = memories[int(choice) - 1]
+    except (ValueError, IndexError):
+        print("\n  ❌ 输入无效\n")
+        return None, memories
+
+    return selected, memories
+
+
+async def _handle_remember_command() -> None:
+    """交互式管理长期记忆。"""
+    print(
+        """
+  /remember 可选操作:
+    1. 列出所有记忆
+    2. 查看某条记忆
+    3. 删除某条记忆
+    4. 查看 MEMORY.md
+    5. 清空所有记忆
+    6. 手动添加记忆
+"""
+    )
+    choice = input("  选择操作（回车取消）: ").strip()
+    if not choice:
+        print()
+        return
+
+    if choice == "1":
+        _print_memories()
+        return
+
+    if choice == "2":
+        selected, _ = _select_memory_by_index()
+        if selected is not None:
+            print(
+                f"\n  [{selected.type}] {selected.name}\n"
+                f"  描述: {selected.description}\n"
+                f"  创建时间: {_format_timestamp(selected.created_at)}\n\n"
+                f"{selected.body}\n"
+            )
+        return
+
+    if choice == "3":
+        selected, _ = _select_memory_by_index()
+        if selected is not None and delete_memory(selected.file_name):
+            state.mark_memory_written_this_turn()
+            print(f"\n  ✅ 已删除记忆 {selected.name}\n")
+        elif selected is not None:
+            print("\n  ❌ 删除失败\n")
+        return
+
+    if choice == "4":
+        index_content = read_memory_index()
+        if index_content.strip():
+            print(f"\n{index_content}\n")
+        else:
+            print("\n  ℹ️ MEMORY.md 为空\n")
+        return
+
+    if choice == "5":
+        confirm = input("  确认清空所有记忆吗？输入 yes 确认: ").strip().lower()
+        if confirm == "yes":
+            deleted_count = clear_all_memories()
+            state.mark_memory_written_this_turn()
+            print(f"\n  ✅ 已清空 {deleted_count} 条长期记忆\n")
+        else:
+            print("\n  已取消\n")
+        return
+
+    if choice == "6":
+        memory_type = input("  类型（user / feedback / project / reference）: ").strip()
+        name = input("  名称: ").strip()
+        description = input("  描述: ").strip()
+        body = input("  正文: ").strip()
+        if not all([memory_type, name, description, body]):
+            print("\n  ❌ 类型、名称、描述、正文都不能为空\n")
+            return
+
+        try:
+            item = write_memory(memory_type, name, description, body)
+            state.mark_memory_written_this_turn()
+            print(f"\n  ✅ 已保存记忆: {item.name}\n")
+        except ValueError as exc:
+            print(f"\n  ❌ {exc}\n")
+        return
+
+    print("\n  ❌ 未知操作\n")
+
+
+def _handle_init_command() -> None:
+    """生成项目级 CLAUDE.md 模板。"""
+    target_path = os.path.join(state.cwd, "CLAUDE.md")
+    if has_project_claude_md():
+        overwrite = input("  检测到已有 CLAUDE.md，输入 yes 覆盖: ").strip().lower()
+        if overwrite != "yes":
+            print("\n  已取消\n")
+            return
+
+    project_name = input("  项目名: ").strip()
+    tech_stack = input("  技术栈: ").strip()
+    coding_rules = input("  编码规范（简短一句）: ").strip()
+    content = build_init_template(project_name, tech_stack, coding_rules)
+
+    with open(target_path, "w", encoding="utf-8") as file:
+        file.write(content)
+    print(f"\n  ✅ 已生成 {target_path}\n")
+
+
 async def handle_command(
     cmd: str,
     messages: list[dict],
@@ -128,7 +274,8 @@ async def handle_command(
     /clear   - 清空对话历史
     /compact - 手动触发微压缩
     /resume  - 恢复历史会话
-    /remember - 记忆管理（第 3 篇实现）
+    /remember - 记忆管理
+    /init    - 生成项目级 CLAUDE.md
 """)
         return True, messages, session_store
 
@@ -204,6 +351,7 @@ async def handle_command(
 
         state.session_id = selected_session_id
         _restore_state_from_meta(restored_meta)
+        state.clear_recent_surfaced_memory_ids()
         session_store = SessionStore(selected_session_id)
 
         print(
@@ -213,7 +361,11 @@ async def handle_command(
         return True, restored_messages, session_store
 
     elif cmd == "/remember":
-        print("\n  ⏳ /remember 将在第 3 篇实现\n")
+        await _handle_remember_command()
+        return True, messages, session_store
+
+    elif cmd == "/init":
+        _handle_init_command()
         return True, messages, session_store
 
     return False, messages, session_store
@@ -282,6 +434,13 @@ async def main():
 
         # 更新交互时间
         state.touch_interaction()
+        state.reset_memory_written_this_turn()
+
+        # 在用户消息前注入相关长期记忆，效果类似给本轮补充上下文。
+        memory_context_messages = await inject_relevant_memories(messages, user_input)
+        for memory_message in memory_context_messages:
+            messages.append(memory_message)
+            await session_store.append_message(memory_message, messages)
 
         # 添加用户消息
         user_message = {"role": "user", "content": user_input}
@@ -312,6 +471,10 @@ async def main():
             print(f"\n  Claude> {messages[-1]['content']}\n")
             print(format_context_report(analyze_context(messages, state.model)))
             print()
+
+        saved_memories = await extract_memories_from_messages(messages)
+        if saved_memories:
+            print(f"  💾 保存了 {saved_memories} 条长期记忆\n")
 
     await session_store.close(messages)
 
