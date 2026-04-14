@@ -7,8 +7,9 @@
 
 ## 教程文章
 
-- [基础搭建：LLM Loop + Tool Use（一）](./doc/%E3%80%90%E4%BB%8E%E9%9B%B6%E5%AE%9E%E7%8E%B0%20Claude%20Code%20%E8%AE%B0%E5%BF%86%E7%B3%BB%E7%BB%9F%E3%80%91%E5%9F%BA%E7%A1%80%E6%90%AD%E5%BB%BA%EF%BC%9A%20LLM%20Loop%20%2B%20Tool%20Use%EF%BC%88%E4%B8%80%EF%BC%89.md)
-- [短期记忆：会话持久化与上下文压缩（二）](./doc/%E3%80%90%E4%BB%8E%E9%9B%B6%E5%AE%9E%E7%8E%B0%20Claude%20Code%20%E8%AE%B0%E5%BF%86%E7%B3%BB%E7%BB%9F%E3%80%91%E7%9F%AD%E6%9C%9F%E8%AE%B0%E5%BF%86%EF%BC%9A%E4%BC%9A%E8%AF%9D%E6%8C%81%E4%B9%85%E5%8C%96%E4%B8%8E%E4%B8%8A%E4%B8%8B%E6%96%87%E5%8E%8B%E7%BC%A9%EF%BC%88%E4%BA%8C%EF%BC%89.md)
+- [【从零实现 Claude Code 记忆系统】基础搭建： LLM Loop + Tool Use（一）](https://mp.weixin.qq.com/s/VZ8SWmA4K_r-qGZ8SfXjVA)
+- [【从零实现 Claude Code 记忆系统】短期记忆：会话持久化与上下文压缩（二）](https://mp.weixin.qq.com/s/TygKV5G8VzDN83S0hHM9kg)
+- [【从零实现 Claude Code 记忆系统】长期记忆：项目指令与自动记忆（三）](https://mp.weixin.qq.com/s/IMdj2pnVt3e9Nbv4J3QQtQ)
 
 
 当前版本先解决最核心的一件事：
